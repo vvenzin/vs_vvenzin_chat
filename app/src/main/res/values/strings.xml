@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">VS vvenzin chat</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="title_activity_chat">ChatActivity</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+
+    <string name="preference_file_key">prefs</string>
+    <string name="saved_port">port</string>
+    <string name="saved_server">server</string>
+    <string name="saved_name">name</string>
+
+</resources>

@@ -20,6 +20,7 @@
         </activity>
         <activity
             android:name=".ChatActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|layoutDirection"
             android:label="@string/title_activity_chat" >
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
@@ -27,6 +28,7 @@
         </activity>
         <activity
             android:name=".SettingsActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|layoutDirection"
             android:label="@string/title_activity_settings" >
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"

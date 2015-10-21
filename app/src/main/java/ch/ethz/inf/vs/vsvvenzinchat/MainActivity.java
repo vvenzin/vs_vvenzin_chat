@@ -2,6 +2,7 @@ package ch.ethz.inf.vs.vsvvenzinchat;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -15,12 +16,18 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     // Constants
     private final String LOGTAG = "## VV-MainActivity ##";
 
+
     private String mName;
+    private int mPort;
+    private InetAddress mIp;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -43,13 +50,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 boolean handled = false;
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
                     InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                    in.hideSoftInputFromWindow(textField.getApplicationWindowToken(),InputMethodManager.HIDE_NOT_ALWAYS);                    mName = textField.getText().toString();
+                    in.hideSoftInputFromWindow(textField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+                    mName = textField.getText().toString();
                     Log.d(LOGTAG, "User entered new name " + mName);
+
+                    // Store name in sharedPrefs
+                    if (mName != null && !mName.equals(""))
+                    {
+                        SharedPreferences sharedPref = getSharedPreferences(
+                                getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putString(getString(R.string.saved_name), mName);
+                        editor.commit();
+                    }
                     handled = true;
                 }
                 return handled;
             }
         });
+
     }
 
     @Override
@@ -66,6 +85,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onResume();
         Log.d(LOGTAG, "onResume()");
 
+        // Check if should check for ip and port
+        if(mPort < 1000 || mIp == null || mName == null || mName.equals("")) loadPrefs();
+
+        // Make buttons appear next to each other when in landscape
+        LinearLayout linearLayout = (LinearLayout) findViewById(R.id.button_layout);
+        // Checks the orientation of the screen
+        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            // landscape
+            linearLayout.setOrientation(LinearLayout.HORIZONTAL);
+        } else if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT){
+            //  portrait
+            linearLayout.setOrientation(LinearLayout.VERTICAL);
+        }
     }
 
     @Override
@@ -110,4 +142,33 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     }
 
+    // Returns true if found false if none stored yed
+    private boolean loadPrefs()
+    {
+        SharedPreferences sharedPref = getSharedPreferences(
+                getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
+        String port = sharedPref.getString(getString(R.string.saved_port), "");
+        String ip = sharedPref.getString(getString(R.string.saved_server), "");
+
+        if (ip.equals("") || port.equals("")) return false;
+        try {
+            mPort = Integer.parseInt(port);
+        } catch (NumberFormatException e) {
+            Log.d(LOGTAG,"Error retrieving port");
+            return false;
+        }
+        try {
+            mIp = InetAddress.getByName(ip);
+        } catch (UnknownHostException e) {
+            Log.d(LOGTAG,"Error creating inet address");
+            return false;
+        }
+        Log.d(LOGTAG,"Fetched ip " + ip + " and port " + port);
+
+        // Load name
+        mName = sharedPref.getString(getString(R.string.saved_name),"");
+        EditText textField = (EditText) findViewById(R.id.name_text_field);
+        textField.setText(mName);
+        return mName.equals("");
+    }
 }

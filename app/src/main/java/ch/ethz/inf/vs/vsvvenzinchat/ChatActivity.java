@@ -1,37 +1,61 @@
 package ch.ethz.inf.vs.vsvvenzinchat;
 
+import android.content.res.Configuration;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 
-public class ChatActivity extends AppCompatActivity {
+public class ChatActivity extends AppCompatActivity implements View.OnClickListener {
+
+    // Constants
+    private final String LOGTAG = "## VV-ChatActivity ##";
+
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
+        Log.d(LOGTAG, "onCreate");
+
+        Button b = (Button) findViewById(R.id.chat_log_btn);
+        b.setOnClickListener(this);
+    }
+
+
+    @Override
+    public void onPause()
+    {
+        super.onPause();
+        Log.d(LOGTAG, "onPause()");
+
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_chat, menu);
-        return true;
+    public void onResume()
+    {
+        super.onResume();
+        Log.d(LOGTAG, "onResume()");
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+    public void onConfigurationChanged(Configuration conf) {super.onConfigurationChanged(conf);}
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+
+    public void onClick(View b)
+    {
+        switch (b.getId()) {
+            case R.id.chat_log_btn:
+
+                // TODO: Stuff from task 3
+
+                break;
         }
-
-        return super.onOptionsItemSelected(item);
     }
+
 }

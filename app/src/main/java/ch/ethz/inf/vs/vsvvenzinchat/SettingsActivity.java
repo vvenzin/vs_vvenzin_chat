@@ -1,28 +1,73 @@
 package ch.ethz.inf.vs.vsvvenzinchat;
 
-import android.content.Intent;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
 
-import java.net.Inet4Address;
 
 public class SettingsActivity extends AppCompatActivity implements View.OnClickListener{
 
     // Constants
     private final String LOGTAG = "## VV-SettingsActvty ##";
 
-    private Inet4Address mServer;
-    private int mPort;
+    private String mServerString;
+    private String mPortString;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
+        Log.d(LOGTAG,"onCreate()");
+
+        Button b = (Button) findViewById(R.id.save_btn);
+        b.setOnClickListener(this);
+
+        // Install handlet to save name in mName when user clicks done
+        final EditText serverTxtField = (EditText) findViewById(R.id.server_text_field);
+        final EditText portTxtField = (EditText) findViewById(R.id.port_text_field);
+        serverTxtField.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        portTxtField.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        serverTxtField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                boolean handled = false;
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    in.hideSoftInputFromWindow(serverTxtField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+                    mServerString = serverTxtField.getText().toString();
+                    Log.d(LOGTAG, "User entered ip " + mServerString);
+                    handled = true;
+                }
+                return handled;
+            }
+        });
+        portTxtField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                boolean handled = false;
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    in.hideSoftInputFromWindow(portTxtField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+                    mPortString = portTxtField.getText().toString();
+                    Log.d(LOGTAG, "User entered port " + mPortString);
+                    handled = true;
+                }
+                return handled;
+            }
+        });
     }
 
 
@@ -40,6 +85,10 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         super.onResume();
         Log.d(LOGTAG, "onResume()");
 
+        // Check if should check for ip and port
+        if (mPortString == null || mServerString == null || mPortString.equals("") || mServerString.equals("")) {
+            getIpAndPort();
+        }
     }
 
     @Override
@@ -60,22 +109,87 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
     // Validate if mServer and mPort are valid
     boolean validate()
     {
-        // TODO: all
-        return false;
+        try {
+            // Port
+            Integer port = Integer.parseInt(mPortString);
+            if ( port < 1000 || port > 9999) return false;
+
+            // Ip
+            if ( mServerString == null || mServerString.isEmpty() ) {
+                return false;
+            }
+            String[] parts = mServerString.split( "\\." );
+            if ( parts.length != 4 ) {
+                return false;
+            }
+            for ( String s : parts ) {
+                int i = Integer.parseInt( s );
+                if ( (i < 0) || (i > 255) ) {
+                    return false;
+                }
+            }
+            if ( mServerString.endsWith(".") ) {
+                return false;
+            }
+            return true;
+        } catch (NumberFormatException nfe) {
+            return false;
+        }
     }
 
-    // Save values to shared preferences
+    // Save values to shared preferences - gets only called when values validated
     private void save()
     {
-        Log.d(LOGTAG, "Saving server data to shared preferences.\n IP:"
-                + mServer.toString() + " PORT:" + Integer.toString(mPort));
-        // TODO: all
+        Log.d(LOGTAG, "Saving server data to shared preferences. IP:"
+                + mServerString.toString() + " PORT:" + mPortString);
+        SharedPreferences sharedPref = getSharedPreferences(
+                getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putString(getString(R.string.saved_port), mPortString);
+        editor.putString(getString(R.string.saved_server), mServerString);
+        editor.commit();
     }
 
     // Tell user that he should enter valid data
     private void errorMessage()
     {
         Log.d(LOGTAG, "Cannot save invalid data");
-        // TODO: all
+
+        // Display error
+        AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
+        dlgAlert.setMessage("Please enter valid address and port. Thank you.");
+        dlgAlert.setTitle("ERROR");
+        dlgAlert.setPositiveButton("OK", null);
+        dlgAlert.setCancelable(true);
+        dlgAlert.create().show();
+        dlgAlert.setPositiveButton("Ok",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+
+                    }
+                });
+
+        // Clear textFields
+        EditText textField = (EditText) findViewById(R.id.server_text_field);
+        textField.setText("");
+        textField = (EditText) findViewById(R.id.port_text_field);
+        textField.setText("");
+    }
+
+    // Returns true if found false if none stored yed
+    private boolean getIpAndPort()
+    {
+        SharedPreferences sharedPref = getSharedPreferences(
+                getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
+        mPortString  = sharedPref.getString(getString(R.string.saved_port), "");
+        mServerString = sharedPref.getString(getString(R.string.saved_server), "");
+
+        // Fill text fields
+        EditText textField = (EditText) findViewById(R.id.server_text_field);
+        textField.setText(mServerString);
+        textField = (EditText) findViewById(R.id.port_text_field);
+        textField.setText(mPortString);
+
+        return (!mPortString.equals("") && !mServerString.equals(""));
     }
 }
