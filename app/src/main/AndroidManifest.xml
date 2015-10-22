@@ -34,6 +34,12 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="ch.ethz.inf.vs.vsvvenzinchat.MainActivity" />
         </activity>
+
+        <service
+            android:name=".ChatService"
+            android:enabled="true"
+            android:exported="true" >
+        </service>
     </application>
 
 </manifest>

@@ -1,9 +1,15 @@
 package ch.ethz.inf.vs.vsvvenzinchat;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
+import android.os.RemoteException;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -19,7 +25,7 @@ import android.widget.TextView;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+public class MainActivity extends AppCompatActivity implements View.OnClickListener, UDPClientManagerListener {
 
     // Constants
     private final String LOGTAG = "## VV-MainActivity ##";
@@ -28,6 +34,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private String mName;
     private int mPort;
     private InetAddress mIp;
+    private UDPClientManager mClientManager;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -55,8 +63,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     Log.d(LOGTAG, "User entered new name " + mName);
 
                     // Store name in sharedPrefs
-                    if (mName != null && !mName.equals(""))
-                    {
+                    if (mName != null && !mName.equals("")) {
                         SharedPreferences sharedPref = getSharedPreferences(
                                 getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
                         SharedPreferences.Editor editor = sharedPref.edit();
@@ -68,6 +75,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 return handled;
             }
         });
+
+
+        // Bind to service
+        mClientManager = new UDPClientManager(this);
+        startStopService(true); // Start service or bind if already exists
 
     }
 
@@ -118,11 +130,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    @Override
+    public void onDestroy()
+    {
+        super.onDestroy();
+        Log.d(LOGTAG, "onDestroy");
+
+        startStopService(false); // Unbind from service
+
+        // TODO: Cleanup
+    }
+
     public void onClick(View b)
     {
         switch (b.getId()) {
             case R.id.join_btn:
-                register();
+                mClientManager.register(true);
                 break;
             case R.id.serttings_btn:
                 Intent i1 = new Intent(this, SettingsActivity.class);
@@ -136,11 +159,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * App logic
      *
      */
-
-    private void register()
-    {
-
-    }
 
     // Returns true if found false if none stored yed
     private boolean loadPrefs()
@@ -171,4 +189,39 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         textField.setText(mName);
         return mName.equals("");
     }
+
+    private void startStopService(boolean start)
+    {
+        if (start){
+            mClientManager.bindService();
+            bindService(new Intent(this, ChatService.class), mClientManager.getConnection(), getApplicationContext().BIND_AUTO_CREATE);
+            if (ChatService.isRunning()) Log.d(LOGTAG,"Service is already running - bind");
+            else {
+                startService(new Intent(this,ChatService.class));
+                Log.d(LOGTAG, "Service is not running yet bind and start");
+            }
+        } else {
+            mClientManager.unbindService();
+            unbindService(mClientManager.getConnection());
+        }
+    }
+
+    /**
+     *
+     * ClientManagerCallbacks
+     *
+     */
+
+    @Override
+    public void onRegister(boolean success)
+    {
+        if (success) {
+            Log.d(LOGTAG,"Successfully registered to server");
+
+            // Change to ChatActivity
+            Intent i = new Intent(this, ChatActivity.class);
+            this.startActivity(i);
+        } else Log.d(LOGTAG,"Error registering to server");
+    }
+
 }
