@@ -11,4 +11,30 @@
     <string name="saved_server">server</string>
     <string name="saved_name">name</string>
 
+
+    <!-- Keys for JSON message -->
+    <string name="json_header">header</string>
+    <string name="json_username">username</string>
+    <string name="uuid">uuid</string>
+    <string name="json_timestamp">timestamp</string>
+    <string name="json_type">type</string>
+    <string name="json_body">body</string>
+    <string name="json_content">content</string>
+
+
+    <!-- Message types -->
+    <string name="msg_register">register</string>
+    <string name="msg_deregister">deregister</string>
+    <string name="msg_ack">ack</string>
+    <string name="msg_retrieve_log">retrieve_chat_log</string>
+    <string name="msg_error">error</string>
+    <string name="msg_message">message</string>
+
+    <!-- More message related -->
+    <string name="json_empty">{}</string>
+
+    <!-- Error messages -->
+    <string name="register_error">We seem to have trouble connecting to the server.
+        Check under settings if ip address and port are correct"</string>
+
 </resources>

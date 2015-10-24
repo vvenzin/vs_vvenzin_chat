@@ -1,16 +1,11 @@
 package ch.ethz.inf.vs.vsvvenzinchat;
 
-import android.content.ComponentName;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.os.IBinder;
-import android.os.Message;
-import android.os.Messenger;
-import android.os.RemoteException;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -20,12 +15,12 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, UDPClientManagerListener {
+public class MainActivity extends EnhancedActivity implements View.OnClickListener, ChatServiceManagerListener {
 
     // Constants
     private final String LOGTAG = "## VV-MainActivity ##";
@@ -33,8 +28,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private String mName;
     private int mPort;
-    private InetAddress mIp;
-    private UDPClientManager mClientManager;
+    private String mIp;
+    private ChatServiceManager mClientManager;
 
 
     @Override
@@ -57,13 +52,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 boolean handled = false;
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
+
+                    // Clear focus
+                    textField.clearFocus();
+                    RelativeLayout parent = (RelativeLayout) findViewById(R.id.parent_edittext);
+                    parent.requestFocus();
+
                     InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     in.hideSoftInputFromWindow(textField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+
                     mName = textField.getText().toString();
                     Log.d(LOGTAG, "User entered new name " + mName);
 
+                    if (inforRady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
+                    else mClientManager.invalidateIpPortName();
+
+
                     // Store name in sharedPrefs
-                    if (mName != null && !mName.equals("")) {
+                    if (mName != null) {
                         SharedPreferences sharedPref = getSharedPreferences(
                                 getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
                         SharedPreferences.Editor editor = sharedPref.edit();
@@ -78,9 +84,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
         // Bind to service
-        mClientManager = new UDPClientManager(this);
-        startStopService(true); // Start service or bind if already exists
-
+        mClientManager = (ChatServiceManager) ServiceManagerSingleton.getInstance(getApplication(), ChatServiceManager.class);
     }
 
     @Override
@@ -92,13 +96,33 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        Log.d(LOGTAG, "onStart()");
+        mClientManager.start();
+        mClientManager.registerListener(this);
+    }
+
+    @Override
+    protected void onEnterBackground() {
+        super.onEnterBackground();
+        Log.d(LOGTAG,"onEnterBackground()");
+
+        // Stop service
+        mClientManager.stop();
+    }
+
+    @Override
     public void onResume()
     {
         super.onResume();
         Log.d(LOGTAG, "onResume()");
 
         // Check if should check for ip and port
-        if(mPort < 1000 || mIp == null || mName == null || mName.equals("")) loadPrefs();
+        loadPrefs();
+        if (inforRady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
+        else mClientManager.invalidateIpPortName();
+
 
         // Make buttons appear next to each other when in landscape
         LinearLayout linearLayout = (LinearLayout) findViewById(R.id.button_layout);
@@ -131,21 +155,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        Log.d(LOGTAG, "onStop()");
+
+        mClientManager.unregisterListener(this);
+
+    }
+
+    @Override
     public void onDestroy()
     {
         super.onDestroy();
-        Log.d(LOGTAG, "onDestroy");
+        Log.d(LOGTAG, "onDestroy()");
+        //mClientManager.unregisterListener(this);
 
-        startStopService(false); // Unbind from service
-
-        // TODO: Cleanup
     }
 
     public void onClick(View b)
     {
         switch (b.getId()) {
             case R.id.join_btn:
-                mClientManager.register(true);
+                // Check if should check for ip and port
+                if (!inforRady()) {
+                    Log.d(LOGTAG, "Could not register. ip:" + mIp + " port: " + mPort + " name: " + mName);
+                    errorMessage("Please enter your name, ip address and port.");
+                } else  mClientManager.register(true);
                 break;
             case R.id.serttings_btn:
                 Intent i1 = new Intent(this, SettingsActivity.class);
@@ -161,50 +196,50 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      */
 
     // Returns true if found false if none stored yed
-    private boolean loadPrefs()
+    private void loadPrefs()
     {
         SharedPreferences sharedPref = getSharedPreferences(
                 getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
         String port = sharedPref.getString(getString(R.string.saved_port), "");
-        String ip = sharedPref.getString(getString(R.string.saved_server), "");
+        mIp = sharedPref.getString(getString(R.string.saved_server), "");
 
-        if (ip.equals("") || port.equals("")) return false;
         try {
             mPort = Integer.parseInt(port);
         } catch (NumberFormatException e) {
+            mPort = -1;
             Log.d(LOGTAG,"Error retrieving port");
-            return false;
         }
-        try {
-            mIp = InetAddress.getByName(ip);
-        } catch (UnknownHostException e) {
-            Log.d(LOGTAG,"Error creating inet address");
-            return false;
-        }
-        Log.d(LOGTAG,"Fetched ip " + ip + " and port " + port);
+        Log.d(LOGTAG,"Fetched ip " + mIp + " and port " + port);
 
         // Load name
         mName = sharedPref.getString(getString(R.string.saved_name),"");
         EditText textField = (EditText) findViewById(R.id.name_text_field);
         textField.setText(mName);
-        return mName.equals("");
     }
 
-    private void startStopService(boolean start)
+    private boolean inforRady()
     {
-        if (start){
-            mClientManager.bindService();
-            bindService(new Intent(this, ChatService.class), mClientManager.getConnection(), getApplicationContext().BIND_AUTO_CREATE);
-            if (ChatService.isRunning()) Log.d(LOGTAG,"Service is already running - bind");
-            else {
-                startService(new Intent(this,ChatService.class));
-                Log.d(LOGTAG, "Service is not running yet bind and start");
-            }
-        } else {
-            mClientManager.unbindService();
-            unbindService(mClientManager.getConnection());
-        }
+        return (mName != null && mIp != null && !mName.equals("") && !mIp.equals("") && mPort > 999 && mPort < 10000);
     }
+
+    // Display error with msg as message
+    private void errorMessage(String msg)
+    {
+        // Display error
+        AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
+        dlgAlert.setMessage(msg);
+        dlgAlert.setTitle("ERROR");
+        dlgAlert.setPositiveButton("OK", null);
+        dlgAlert.setCancelable(true);
+        dlgAlert.create().show();
+        dlgAlert.setPositiveButton("Ok",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+
+                    }
+                });
+    }
+
 
     /**
      *
@@ -213,15 +248,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      */
 
     @Override
-    public void onRegister(boolean success)
+    public void onRegister(boolean register)
     {
-        if (success) {
+        if (register) {
             Log.d(LOGTAG,"Successfully registered to server");
 
             // Change to ChatActivity
             Intent i = new Intent(this, ChatActivity.class);
             this.startActivity(i);
-        } else Log.d(LOGTAG,"Error registering to server");
+        }
     }
 
+    @Override
+    public void onRegisterError()
+    {
+        Log.d(LOGTAG,"Error registering to server");
+        errorMessage(getString(R.string.register_error));
+    }
+
+    @Override
+    public void onReceivedChatLog(List<String> messages) {} // Do nothing here
 }

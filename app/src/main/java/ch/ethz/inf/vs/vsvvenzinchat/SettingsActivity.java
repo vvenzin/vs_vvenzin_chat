@@ -14,10 +14,11 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 
-public class SettingsActivity extends AppCompatActivity implements View.OnClickListener{
+public class SettingsActivity extends EnhancedActivity implements View.OnClickListener{
 
     // Constants
     private final String LOGTAG = "## VV-SettingsActvty ##";
@@ -45,6 +46,12 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 boolean handled = false;
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
+
+                    // Clear focus
+                    serverTxtField.clearFocus();
+                    LinearLayout parent = (LinearLayout) findViewById(R.id.parent_layout);
+                    parent.requestFocus();
+
                     InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     in.hideSoftInputFromWindow(serverTxtField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
                     mServerString = serverTxtField.getText().toString();
@@ -59,6 +66,12 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 boolean handled = false;
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
+
+                    // Clear focus
+                    portTxtField.clearFocus();
+                    LinearLayout parent = (LinearLayout) findViewById(R.id.parent_layout);
+                    parent.requestFocus();
+
                     InputMethodManager in = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     in.hideSoftInputFromWindow(portTxtField.getApplicationWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
                     mPortString = portTxtField.getText().toString();
@@ -68,6 +81,15 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
                 return handled;
             }
         });
+    }
+
+    @Override
+    protected void onEnterBackground()
+    {
+        super.onEnterBackground();
+        Log.d(LOGTAG,"onEnterBackground()");
+
+
     }
 
 
@@ -109,32 +131,33 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
     // Validate if mServer and mPort are valid
     boolean validate()
     {
-        try {
-            // Port
-            Integer port = Integer.parseInt(mPortString);
-            if ( port < 1000 || port > 9999) return false;
+        boolean ipV = mServerString.equals("");
+        boolean portV = mPortString.equals("");
 
-            // Ip
-            if ( mServerString == null || mServerString.isEmpty() ) {
-                return false;
-            }
-            String[] parts = mServerString.split( "\\." );
-            if ( parts.length != 4 ) {
-                return false;
-            }
-            for ( String s : parts ) {
-                int i = Integer.parseInt( s );
-                if ( (i < 0) || (i > 255) ) {
-                    return false;
+        // Port
+        try {
+            Integer port = Integer.parseInt(mPortString);
+            portV = !(port < 1000 || port > 9999);
+        } catch (NumberFormatException e) {}
+
+        if (!ipV) {
+
+
+            // IP
+            try {
+                String[] parts = mServerString.split("\\.");
+                if (parts.length != 4) ipV = false;
+                for (String s : parts) {
+                    int i = Integer.parseInt(s);
+                    if ((i < 0) || (i > 255)) ipV = false;
                 }
+
+                if (mServerString.endsWith(".")) ipV = false;
+                ipV = true;
+            } catch (NumberFormatException nfe) {
             }
-            if ( mServerString.endsWith(".") ) {
-                return false;
-            }
-            return true;
-        } catch (NumberFormatException nfe) {
-            return false;
         }
+        return ipV && portV;
     }
 
     // Save values to shared preferences - gets only called when values validated
@@ -169,11 +192,8 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
                     }
                 });
 
-        // Clear textFields
-        EditText textField = (EditText) findViewById(R.id.server_text_field);
-        textField.setText("");
-        textField = (EditText) findViewById(R.id.port_text_field);
-        textField.setText("");
+        save();
+
     }
 
     // Returns true if found false if none stored yed
