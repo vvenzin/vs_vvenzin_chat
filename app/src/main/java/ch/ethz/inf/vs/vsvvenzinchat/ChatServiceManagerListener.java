@@ -7,10 +7,8 @@ import java.util.List;
  */
 public interface ChatServiceManagerListener {
 
-    public void onRegister(boolean success);
-
-    public void onRegisterError();
-
-    public void onReceivedChatLog(List<String> messages);
+    void onRegister(boolean register); // True for registering, false for deregistering
+    void onError();
+    void onReceivedChatLog(List<String> messages);
 
 }

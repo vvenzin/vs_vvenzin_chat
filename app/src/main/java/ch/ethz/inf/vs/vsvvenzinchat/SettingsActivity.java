@@ -3,9 +3,9 @@ package ch.ethz.inf.vs.vsvvenzinchat;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -17,14 +17,19 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.List;
 
-public class SettingsActivity extends EnhancedActivity implements View.OnClickListener{
+import ch.ethz.inf.vs.helperclasses.EnhancedActivity;
+
+
+public class SettingsActivity extends EnhancedActivity implements View.OnClickListener, ChatServiceManagerListener{
 
     // Constants
     private final String LOGTAG = "## VV-SettingsActvty ##";
 
     private String mServerString;
     private String mPortString;
+    private ChatServiceManager mClientManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -81,17 +86,28 @@ public class SettingsActivity extends EnhancedActivity implements View.OnClickLi
                 return handled;
             }
         });
+
+        // Bind to service
+        mClientManager = (ChatServiceManager) ServiceManagerSingleton.getInstance(getApplication(), ChatServiceManager.class);
+    }
+
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.d(LOGTAG, "onStart()");
+        mClientManager.start();
+        mClientManager.registerListener(this);
     }
 
     @Override
-    protected void onEnterBackground()
-    {
+    protected void onEnterBackground() {
         super.onEnterBackground();
-        Log.d(LOGTAG,"onEnterBackground()");
+        Log.d(LOGTAG, "onEnterBackground()");
 
-
+        // Stop service
+        mClientManager.stop();
     }
-
 
     @Override
     public void onPause()
@@ -101,6 +117,13 @@ public class SettingsActivity extends EnhancedActivity implements View.OnClickLi
 
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.d(LOGTAG, "onStop()");
+
+        mClientManager.unregisterListener(this);
+    }
     @Override
     public void onResume()
     {
@@ -211,5 +234,45 @@ public class SettingsActivity extends EnhancedActivity implements View.OnClickLi
         textField.setText(mPortString);
 
         return (!mPortString.equals("") && !mServerString.equals(""));
+    }
+
+    @Override
+    public void onRegister(boolean register)
+    {
+        if (register) {
+            Log.d(LOGTAG,"Successfully registered to server");
+
+            // Change to ChatActivity
+            Intent i = new Intent(this, ChatActivity.class);
+            this.startActivity(i);
+        }
+    }
+
+    @Override
+    public void onError()
+    {
+        Log.d(LOGTAG, "Error registering to server");
+        errorMessage(getString(R.string.server_error));
+    }
+
+    @Override
+    public void onReceivedChatLog(List<String> messages) {}
+
+    // Display error with msg as message
+    private void errorMessage(String msg)
+    {
+        // Display error
+        AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
+        dlgAlert.setMessage(msg);
+        dlgAlert.setTitle("ERROR");
+        dlgAlert.setPositiveButton("OK", null);
+        dlgAlert.setCancelable(true);
+        dlgAlert.create().show();
+        dlgAlert.setPositiveButton("Ok",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+
+                    }
+                });
     }
 }

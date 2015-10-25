@@ -18,7 +18,20 @@ import java.util.List;
 
 /**
  * Created by Valentin on 23/10/15.
+ *
+ * This class shall be used as additional layer of indirection between the service and the application.
+ * The ServiceManager creates and binds a service to the application. Activites may register themselves
+ * as listener to the ServiceManager. If multiple activities want to use the same service, they can get
+ * a singleton instance of the ServiceManager through ServiceManagerSigleton.
+ *
+ * To implement specific behavior for the specific service; subclass from ServiceManager and create an
+ * appropriate ServiceManagerListener interface. You may then implement your own callbacks for the activities.
+ *
+ * Note that you must implement the low-level message passing in the service yourself. Take an example
+ * from this class since it is its symmetric counterpart anyway.
  */
+
+
 public abstract class ServiceManager {
 
     // Constants
@@ -76,6 +89,7 @@ public abstract class ServiceManager {
         }
     }
 
+    // Force sublcass to implement message handling for specific messages
     abstract void handleCustomMessage(Message msg);
 
     ServiceManager(Application app)
@@ -87,23 +101,7 @@ public abstract class ServiceManager {
     }
 
 
-    // Starts Service if not started yet and register
-    public void start()
-    {
-        if (!mIsBound) {
-            // Bind service
-            Context appContext = mApp.getApplicationContext();
-            mApp.bindService(new Intent(appContext, ChatService.class),
-                    mConnection, mApp.getApplicationContext().BIND_AUTO_CREATE);
-            if (ChatService.isRunning()) Log.d(LOGTAG,"Service is already running - bind");
-            else {
-                mApp.startService(new Intent(appContext, ChatService.class));
-                Log.d(LOGTAG, "Service is not running yet bind and start");
-            }
-            mIsBound = true;
-        }
-    }
-
+    // Register/unregister observer
     public void registerListener(ChatServiceManagerListener listener)
     {
         // Register listener
@@ -123,6 +121,24 @@ public abstract class ServiceManager {
         mListener.remove(i);
     }
 
+    // Starts Service if not started yet and register
+    public void start()
+    {
+        if (!mIsBound) {
+            // Bind service
+            Context appContext = mApp.getApplicationContext();
+            mApp.bindService(new Intent(appContext, ChatService.class),
+                    mConnection, mApp.getApplicationContext().BIND_AUTO_CREATE);
+            if (ChatService.isRunning()) Log.d(LOGTAG,"Service is already running - bind");
+            else {
+                mApp.startService(new Intent(appContext, ChatService.class));
+                Log.d(LOGTAG, "Service is not running yet bind and start");
+            }
+            mIsBound = true;
+        }
+    }
+
+    // This doesnt work yet.. somehow the service survives every time
     public void stop()
     {
         // Unbind service
@@ -133,12 +149,15 @@ public abstract class ServiceManager {
                 Log.d(LOGTAG, "Unregister from service");
             }
         }
-        mApp.unbindService(mConnection);sendMessageToService(MSG_STOP,0,0,null,null);
+        sendMessageToService(MSG_STOP, 0, 0, null, null);
+        mApp.unbindService(mConnection);
+        mApp.stopService(new Intent(mApp.getApplicationContext(), ChatService.class));
     }
 
     // Send message to service
     protected void sendMessageToService(int messageType, int arg1, int arg2, String arg3,String arg4)
     {
+        Log.d(LOGTAG,"Sending message to service: " + Integer.toString(messageType));
         try {
             Message msg = null;
             switch (messageType) {
@@ -171,7 +190,7 @@ public abstract class ServiceManager {
     }
 
 
-    // Helper function
+    // Helper function to initialize mConnection
     private void initConnection()
     {
         mConnection = new ServiceConnection() {

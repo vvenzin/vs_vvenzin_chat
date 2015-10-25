@@ -9,8 +9,7 @@ import java.lang.reflect.Constructor;
  * Created by Valentin on 23/10/15.
  *
  * Use this class to get a singleton instance of a ServiceManager.
- * This is useful when the manager wants to be shared across different activities.
- * Which in turn enable us to just let the service run without unbind between activities.
+ * This is useful when the manager (and the service) wants to be shared across different activities.
  *
  */
 public class ServiceManagerSingleton {

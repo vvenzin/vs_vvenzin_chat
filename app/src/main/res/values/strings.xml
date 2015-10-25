@@ -32,9 +32,14 @@
 
     <!-- More message related -->
     <string name="json_empty">{}</string>
+    <string name="uuid_pref">uuid</string>
 
     <!-- Error messages -->
-    <string name="register_error">We seem to have trouble connecting to the server.
+    <string name="server_error">We seem to have trouble connecting to the server.
         Check under settings if ip address and port are correct"</string>
+    <string name="chatlog_error">There was an error while retrieving the chat log. Try to deregister or contact the
+        server administrator.</string>
+
+
 
 </resources>

@@ -21,20 +21,33 @@ public class ChatServiceManager extends ServiceManager{
     private final String LOGTAG = "## VV-UDPClientM ##";
 
 
-    // Command:  arg1 == 1 -> register  arg1 = 0 -> deregister
-    // Response: arg1 == 1 -> success   arg1 = 0 -> failure
+    // Info, only need as cache
+    private String mIp;
+    private int mPort;
+    private String mName;
+
+    /**
+     * To service:      arg1=1 -> register, arg1=0 -> deregister
+     * From service:    arg1=1 -> success,  arg1=0 -> failure
+     */
     static final int MSG_REGISTER = MSG_1;
 
-    // No arguments needed to Service
-    // From service: If arg1 == 1: all messages received else arg3 should contain content String
+    /**
+     * To service:      nor arguments
+     * From service:    arg1=1 -> all messages arrived, may process them
+     *                  arg1!=1 -> arg3 contains message header and arg4 message body
+     */
     static final int MSG_CHAT_LOG = MSG_3;
 
-    // Only to service to tell port ip and name.
-    // arg1 for port and arg3 for ip, arg4 for name.
-    // arg2 == -1 if want to reset all info.
+    /**
+     * To service:      arg1=port, arg3=ip, arg4=name
+     *                  arg2=-1 -> invalidate all info
+     * From service:    arg1=1 -> wanted to register but hadnt info
+     *                  arg1=2 -> wanted to deregister but hadnt info
+     */
     static final int MSG_ADDRESS = MSG_4;
 
-
+    // Store messages until all arrived
     private List<String> mMessageBuffer;
 
     public ChatServiceManager(Application app)
@@ -44,18 +57,31 @@ public class ChatServiceManager extends ServiceManager{
         mMessageBuffer = new ArrayList<>();
     }
 
+    // Call to set the service's ip, port and name
     public void setIpPortName(String ip, int port,String name) {sendMessageToService(MSG_ADDRESS, port, 0, ip, name);}
 
+    // Invalidates services ip, port and name
     public void invalidateIpPortName() {sendMessageToService(MSG_ADDRESS,0,-1,null,null);}
 
+    // Request chat log
     public void getChatLog() {sendMessageToService(MSG_CHAT_LOG,0,0,null,null);}
 
-    // Register to server -> callback when registered or when error
-    public void register(boolean register)
+    // Register to server
+    public void register(boolean register, String ip, int port,String name)
     {
-        int arg = 0;
-        if (register) arg = 1;
+        mIp = ip;
+        mPort = port;
+        mName = name;
+        int arg = 0; // deregister
+        if (register) arg = 1; // register
         sendMessageToService(MSG_REGISTER, arg, 0, null, null);
+    }
+
+    public boolean isRegistered() {return ChatService.isRegistered();}
+
+    private boolean infoReady()
+    {
+        return (mName != null && mIp != null && !mName.equals("") && !mIp.equals("") && mPort > 999 && mPort < 10000);
     }
 
     /**
@@ -70,7 +96,7 @@ public class ChatServiceManager extends ServiceManager{
             case MSG_REGISTER:
                 if (mListener != null) {
                     if (msg.arg2 == 0) for (ChatServiceManagerListener l: mListener) l.onRegister((msg.arg1 == 1));
-                    else for (ChatServiceManagerListener l: mListener) l.onRegisterError();
+                    else for (ChatServiceManagerListener l: mListener) l.onError();
                 }
                 break;
             case MSG_CHAT_LOG:
@@ -83,7 +109,19 @@ public class ChatServiceManager extends ServiceManager{
                     Bundle b = msg.getData();
                     mMessageBuffer.add(b.getString("arg3"));
                 }
+                break;
+            case MSG_ADDRESS:
+                // Service hadnt info to register so
+                if (infoReady()) {
+                    sendMessageToService(MSG_ADDRESS, mPort, 0, mIp, mName);
 
+                    if (msg.arg1 == 1) sendMessageToService(MSG_REGISTER, 1, 0, null, null);
+                    else if (msg.arg1 == 2) sendMessageToService(MSG_REGISTER, 0, 0, null, null);
+
+                }
+                else Log.d(LOGTAG,"Service needs info but manager hasnt");
+
+                break;
         }
     }
 

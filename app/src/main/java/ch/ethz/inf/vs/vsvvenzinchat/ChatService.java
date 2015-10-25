@@ -1,5 +1,6 @@
 package ch.ethz.inf.vs.vsvvenzinchat;
 
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.app.Service;
 import android.content.Intent;
@@ -19,11 +20,14 @@ import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.UUID;
+
+import ch.ethz.inf.vs.helperclasses.RunnableArg;
 
 public class ChatService extends Service {
 
@@ -32,7 +36,7 @@ public class ChatService extends Service {
     private final int PKT_SIZE = 256;
     private final int NO_RETRY = 5;
     private final int TIMEOUT = 10000; // 10s
-    private final int TIMEOUT_LASR_MSG = 100;
+    private final int TIMEOUT_LASR_MSG = 600; // Do not set to low
 
     // Types of messages for client <-> server communication
     public enum MSG {REGISTER, DEREGISTER, RETRIEVE_LOG, ACK, ERROR, MESSAGE}
@@ -44,7 +48,10 @@ public class ChatService extends Service {
     private final String MESSAGE_STR = "message";
 
     private static boolean isRunning = false;
+    private static boolean isRegistered = false; // Hard to keep consistent because dont really know if registered at beginning
     public static boolean isRunning() {return isRunning;}
+    public static boolean isRegistered() {return isRegistered;}
+
 
 
     // Info
@@ -54,7 +61,6 @@ public class ChatService extends Service {
 
     // Server Client
     private DatagramSocket mSocket;
-    private boolean mRegistered;
     private String mUUID;
     private RunnableArg mRegisterHandler;
     private RunnableArg mDeregisterCleanupHandler;
@@ -88,12 +94,10 @@ public class ChatService extends Service {
                     break;
 
                 case ChatServiceManager.MSG_STOP:
+                    // TODO: Somehow the service survives !!?
                     Log.d(LOGTAG, "Going to kill myself");
+                    deregister(true);
                     isRunning = false;
-                    if (mSocket != null) {
-                        mSocket.close();
-                        mSocket = null;
-                    }
                     stopSelf();
                     break;
 
@@ -107,13 +111,7 @@ public class ChatService extends Service {
                         mPort = msg.arg1;
                         mIp = msg.getData().getString("arg3");
                         mName = msg.getData().getString("arg4");
-                        try {
-                            if (mSocket == null) mSocket = new DatagramSocket(mPort);
-                            else {
-                                mSocket.close();
-                                mSocket = new DatagramSocket(mPort);
-                            }
-                        } catch (SocketException e) {e.printStackTrace();}
+                        initSocket(mPort);
                     } else {
                         // Invalidate info
                         mPort = -1;
@@ -133,7 +131,9 @@ public class ChatService extends Service {
     }
 
     // Send Message to all clients of service
-    private void sendMessageToClients(int messageType, int arg1, int arg2, String arg3, String arg4) {
+    private void sendMessageToClients(int messageType, int arg1, int arg2, String arg3, String arg4)
+    {
+        Log.d(LOGTAG,"Sending message to ServiceManager: " + Integer.toString(messageType));
         try {
             Message msg = null;
             switch (messageType) {
@@ -180,7 +180,16 @@ public class ChatService extends Service {
         Log.d(LOGTAG, "onCreate()");
         isRunning = true;
 
-        mUUID = UUID.randomUUID().toString();
+        // UUID
+        SharedPreferences sharedPref = getSharedPreferences(
+                getString(R.string.preference_file_key), getApplicationContext().MODE_PRIVATE);
+        mUUID = sharedPref.getString(getString(R.string.uuid_pref), "");
+        if (mUUID.equals("")) {
+            mUUID = UUID.randomUUID().toString();
+            SharedPreferences.Editor editor = sharedPref.edit();
+            editor.putString(getString(R.string.uuid_pref), mUUID);
+            editor.commit();
+        }
     }
 
     @Override
@@ -214,8 +223,6 @@ public class ChatService extends Service {
 
     public ChatService()
     {
-        mRegistered = false;
-
         // Definde functions to be called when received a packet
         mRegisterHandler = new RunnableArg() {
             @Override
@@ -224,28 +231,26 @@ public class ChatService extends Service {
             public void run(Object... args)
             {
                 super.run(args);
-                if (args.length != 2) Log.d(LOGTAG,"Illegal use of pkt handler");
+                if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
-                    JSONObject header = (JSONObject) args[0];
-                    JSONObject body = (JSONObject) args[1];
-
+                    JSONObject header = (JSONObject) args[1];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
                             case ACK_STR:
                                 Log.d(LOGTAG, "Got ack - succesfully registered");
-                                mRegistered = true;
+                                isRegistered = true;
                                 int arg = 0;
-                                if (mRegistered) arg = 1;
+                                if (isRegistered) arg = 1;
                                 sendMessageToClients(ChatServiceManager.MSG_REGISTER, arg, 0, null, null);
                                 break;
                             case ERROR_STR:
                                 Log.d(LOGTAG,"Got error while registering - probably already registered - do as if??");
                                 // TODO: Something smart
 
-                                mRegistered = true;
+                                isRegistered = true;
                                 arg = 0;
-                                if (mRegistered) arg = 1;
+                                if (isRegistered) arg = 1;
                                 sendMessageToClients(ChatServiceManager.MSG_REGISTER, arg, 0, null, null);
                                 break;
                             default:
@@ -263,24 +268,20 @@ public class ChatService extends Service {
             public void run(Object... args)
             {
                 super.run(args);
-                if (args.length != 2) Log.d(LOGTAG,"Illegal use of pkt handler");
+                if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
-                    JSONObject header = (JSONObject) args[0];
-                    JSONObject body = (JSONObject) args[1];
-
+                    JSONObject header = (JSONObject) args[1];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
                             case ACK_STR:
                                 Log.d(LOGTAG, "Got ack - succesfully deregistered");
-                                mRegistered = false;
-                                int arg = 0;
-                                if (mRegistered) arg = 1;
-                                sendMessageToClients(ChatServiceManager.MSG_REGISTER, arg, 0, null, null);
+                                isRegistered = false;
+                                sendMessageToClients(ChatServiceManager.MSG_REGISTER, 0, 0, null, null);
                                 break;
                             case ERROR_STR:
                                 Log.d(LOGTAG, "Got error while deregistering");
-                                if (mRegistered) reportServerProblem();
+                                if (isRegistered) reportServerProblem();
                                 else Log.d(LOGTAG,"Probably lready deregistered");
                                 break;
                             default:
@@ -297,10 +298,9 @@ public class ChatService extends Service {
             @Override
             public void run(Object... args) {
                 super.run(args);
-                if (args.length != 2) Log.d(LOGTAG,"Illegal use of pkt handler");
+                if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
-                    JSONObject header = (JSONObject) args[0];
-                    JSONObject body = (JSONObject) args[1];
+                    JSONObject header =(JSONObject) args[1];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
@@ -315,9 +315,10 @@ public class ChatService extends Service {
                         }
                     }
                     catch (JSONException e) {e.printStackTrace();}
-                    mRegistered = false;
+                    // Close regardless of what packet i got
+                    isRegistered = false;
                     if(mSocket != null) {
-                        mSocket.close();
+                        if (!mSocket.isClosed()) mSocket.close();
                         mSocket = null;
                     }
 
@@ -332,21 +333,20 @@ public class ChatService extends Service {
             public void run(Object... args)
             {
                 super.run(args);
-                if (args.length != 2) Log.d(LOGTAG,"Illegal use of pkt handler");
+                if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
-                    JSONObject header = (JSONObject) args[0];
-                    JSONObject body = (JSONObject) args[1];
+                    JSONObject pkt = (JSONObject) args[0];
+                    JSONObject header = (JSONObject) args[1];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
                             case MESSAGE_STR:
-                                Log.d(LOGTAG,"Got message " + body.getString(getString(R.string.json_content)).toString());
-
-                                String content = body.getString(getString(R.string.json_content));
-                                sendMessageToClients(ChatServiceManager.MSG_CHAT_LOG,0,0,content,null);
+                                sendMessageToClients(ChatServiceManager.MSG_CHAT_LOG, 0, 0,
+                                        pkt.toString(), null);
 
                                 break;
                             case ERROR_STR:
+                                reportServerProblem();
                                 Log.d(LOGTAG, "Got error while while receiving chatlog");
                                 break;
                             default:
@@ -436,8 +436,8 @@ public class ChatService extends Service {
                 sendMessageToClients(ChatServiceManager.MSG_CHAT_LOG,1,0,null,null);
             }
         };
-        receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, 0, mChatLogHandler,0,TIMEOUT_LASR_MSG,callOnTimout);
-        sender.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,MSG.RETRIEVE_LOG);
+        receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, 0, mChatLogHandler, 0, TIMEOUT_LASR_MSG, callOnTimout);
+        sender.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, MSG.RETRIEVE_LOG);
     }
 
     // Sanity check for info
@@ -446,6 +446,22 @@ public class ChatService extends Service {
         boolean ready = (mIp != null && mName != null && mPort > 999 && !mIp.equals("") && !mName.equals(""));
         if (!ready) Log.d(LOGTAG,"Not ready. name: " + mName + " ip: " + mIp + " mPort " + Integer.toString(mPort));
         return ready;
+    }
+
+    // Init socket
+    private void initSocket(int port)
+    {
+        try {
+            if (mSocket != null) {
+                if (mSocket.isConnected()) mSocket.disconnect();
+                if (!mSocket.isClosed()) mSocket.disconnect();
+                mSocket = null;
+            }
+            mSocket = new DatagramSocket(null);
+            mSocket.setReuseAddress(true);
+            mSocket.bind(new InetSocketAddress(port));
+        } catch (SocketException e) {e.printStackTrace();}
+
     }
 
     /**
@@ -492,23 +508,24 @@ public class ChatService extends Service {
             do {
                 noPkt = 0;
                 try {
+                    if (mSocket == null || mSocket.isClosed()) {
+                        Log.d(LOGTAG, "Wanted to receive - but socket was closed");
+                        if (infoReady()) {initSocket(mPort);}
+                        if(mSocket == null) break;
+                    }
                     mSocket.setSoTimeout(timeout);
                     byte[] receiveData = new byte[PKT_SIZE];
 
                     DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                     while(noPkt < exptNoPkt) // Bound while(true) -- prevent flooding
                     {
-                        if (mSocket.isClosed()) {
-                            Log.d(LOGTAG, "Wanted to receive - but socket was closed");
-                            break;
-                        }
-                        else mSocket.receive(receivePacket);
+                        mSocket.receive(receivePacket);
 
                         try {
                             JSONObject jpkt = new JSONObject(new String(receivePacket.getData(), "UTF-8"));
                             JSONObject header = jpkt.getJSONObject(getString(R.string.json_header));
                             JSONObject body = jpkt.getJSONObject(getString(R.string.json_body));
-                            pktHandler.run(header, body); // Handle packet
+                            pktHandler.run(jpkt,header, body); // Handle packet
                         } catch (JSONException e) {e.printStackTrace();}
                         noPkt++;
                     }
@@ -533,20 +550,7 @@ public class ChatService extends Service {
         }
 
         @Override
-        protected void onPostExecute(String result)
-        {
-            /*
-            Log.d(LOGTAG,"Receiver returned with: " + result);
-
-            switch (result) {
-                case "nok":
-                    break;
-                case "ok":
-                case "flooded":
-                default:
-                    // Handle other return values here
-            }*/
-        }
+        protected void onPostExecute(String result) {}
     }
 
     // Sends packet to server - invoke sender after receiver
@@ -562,12 +566,31 @@ public class ChatService extends Service {
         @Override
         protected String doInBackground(Object... params)
         {
-            if (!infoReady()) return "not_ready";
             try {
                 ip = InetAddress.getByName(mIp);
 
                 // Create and send packet
-                DatagramPacket pkt = makePacket((MSG) params[0],ip, mPort);
+                MSG msgType = (MSG) params[0];
+                DatagramPacket pkt = makePacket(msgType,ip, mPort);
+                if (mSocket == null || mSocket.isClosed()) {
+                    Log.d(LOGTAG, "Wanted to send pkt but socket was closed");
+                    if (infoReady()) initSocket(mPort);
+                    if (mSocket == null)
+                    {
+                        // Request data and retry
+                        switch (msgType) {
+                            case REGISTER:
+                                sendMessageToClients(ChatServiceManager.MSG_ADDRESS,1,0,null,null);
+                                break;
+                            case DEREGISTER:
+                                sendMessageToClients(ChatServiceManager.MSG_ADDRESS,2,0,null,null);
+                                break;
+                            default:
+                                sendMessageToClients(ChatServiceManager.MSG_ADDRESS,0,0,null,null);
+                        }
+                        return "";
+                    }
+                }
                 mSocket.send(pkt);
             }
             catch (UnknownHostException e) {e.printStackTrace();}

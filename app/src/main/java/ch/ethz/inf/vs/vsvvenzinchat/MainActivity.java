@@ -20,6 +20,8 @@ import android.widget.TextView;
 
 import java.util.List;
 
+import ch.ethz.inf.vs.helperclasses.EnhancedActivity;
+
 public class MainActivity extends EnhancedActivity implements View.OnClickListener, ChatServiceManagerListener {
 
     // Constants
@@ -64,7 +66,7 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
                     mName = textField.getText().toString();
                     Log.d(LOGTAG, "User entered new name " + mName);
 
-                    if (inforRady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
+                    if (infoReady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
                     else mClientManager.invalidateIpPortName();
 
 
@@ -88,17 +90,8 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     }
 
     @Override
-    public void onPause()
-    {
-        super.onPause();
-        Log.d(LOGTAG, "onPause()");
-
-    }
-
-    @Override
     protected void onStart() {
         super.onStart();
-        Log.d(LOGTAG, "onStart()");
         mClientManager.start();
         mClientManager.registerListener(this);
     }
@@ -106,7 +99,6 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     @Override
     protected void onEnterBackground() {
         super.onEnterBackground();
-        Log.d(LOGTAG,"onEnterBackground()");
 
         // Stop service
         mClientManager.stop();
@@ -116,11 +108,10 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     public void onResume()
     {
         super.onResume();
-        Log.d(LOGTAG, "onResume()");
 
         // Check if should check for ip and port
         loadPrefs();
-        if (inforRady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
+        if (infoReady()) mClientManager.setIpPortName(mIp,mPort,mName); // Tell service about ip and port
         else mClientManager.invalidateIpPortName();
 
 
@@ -140,7 +131,6 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     public void onConfigurationChanged(Configuration conf)
     {
         super.onConfigurationChanged(conf);
-        Log.d(LOGTAG, "onConfigrationChanged()");
 
         // Make buttons appear next to each other when in landscape
         LinearLayout linearLayout = (LinearLayout) findViewById(R.id.button_layout);
@@ -157,19 +147,7 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     @Override
     protected void onStop() {
         super.onStop();
-        Log.d(LOGTAG, "onStop()");
-
         mClientManager.unregisterListener(this);
-
-    }
-
-    @Override
-    public void onDestroy()
-    {
-        super.onDestroy();
-        Log.d(LOGTAG, "onDestroy()");
-        //mClientManager.unregisterListener(this);
-
     }
 
     public void onClick(View b)
@@ -177,10 +155,10 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
         switch (b.getId()) {
             case R.id.join_btn:
                 // Check if should check for ip and port
-                if (!inforRady()) {
+                if (!infoReady()) {
                     Log.d(LOGTAG, "Could not register. ip:" + mIp + " port: " + mPort + " name: " + mName);
                     errorMessage("Please enter your name, ip address and port.");
-                } else  mClientManager.register(true);
+                } else  mClientManager.register(true,mIp,mPort,mName);
                 break;
             case R.id.serttings_btn:
                 Intent i1 = new Intent(this, SettingsActivity.class);
@@ -217,7 +195,7 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
         textField.setText(mName);
     }
 
-    private boolean inforRady()
+    private boolean infoReady()
     {
         return (mName != null && mIp != null && !mName.equals("") && !mIp.equals("") && mPort > 999 && mPort < 10000);
     }
@@ -260,10 +238,10 @@ public class MainActivity extends EnhancedActivity implements View.OnClickListen
     }
 
     @Override
-    public void onRegisterError()
+    public void onError()
     {
         Log.d(LOGTAG,"Error registering to server");
-        errorMessage(getString(R.string.register_error));
+        errorMessage(getString(R.string.server_error));
     }
 
     @Override
