@@ -33,19 +33,11 @@ public class ChatService extends Service {
 
     // Constants
     private final String LOGTAG = "## VV-ChatService ##";
-    private final int PKT_SIZE = 256;
     private final int NO_RETRY = 5;
-    private final int TIMEOUT = 10000; // 10s
-    private final int TIMEOUT_LASR_MSG = 600; // Do not set to low
+    private final int TIMEOUT_LASR_MSG = 400; // Do not set to low
 
     // Types of messages for client <-> server communication
     public enum MSG {REGISTER, DEREGISTER, RETRIEVE_LOG, ACK, ERROR, MESSAGE}
-    private final String REGISTER_STR = "register";
-    private final String DEREGISTER_STR = "deregister";
-    private final String ACK_STR = "ack";
-    private final String RETRIEVE_LOG_STR = "retrieve_chat_log";
-    private final String ERROR_STR = "error";
-    private final String MESSAGE_STR = "message";
 
     private static boolean isRunning = false;
     private static boolean isRegistered = false; // Hard to keep consistent because dont really know if registered at beginning
@@ -234,19 +226,20 @@ public class ChatService extends Service {
                 if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
                     JSONObject header = (JSONObject) args[1];
+                    JSONObject body =  (JSONObject) args[2];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
-                            case ACK_STR:
+                            case MessageTypes.ACK_MESSAGE:
                                 Log.d(LOGTAG, "Got ack - succesfully registered");
                                 isRegistered = true;
                                 int arg = 0;
                                 if (isRegistered) arg = 1;
                                 sendMessageToClients(ChatServiceManager.MSG_REGISTER, arg, 0, null, null);
                                 break;
-                            case ERROR_STR:
-                                Log.d(LOGTAG,"Got error while registering - probably already registered - do as if??");
-                                // TODO: Something smart
+                            case MessageTypes.ERROR_MESSAGE:
+                                String errorString = ErrorCodes.getStringError(body.getInt(getString(R.string.json_content)));
+                                Log.d(LOGTAG,"Got error: " + errorString);
 
                                 isRegistered = true;
                                 arg = 0;
@@ -271,16 +264,18 @@ public class ChatService extends Service {
                 if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
                     JSONObject header = (JSONObject) args[1];
+                    JSONObject body =  (JSONObject) args[2];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
-                            case ACK_STR:
+                            case MessageTypes.ACK_MESSAGE:
                                 Log.d(LOGTAG, "Got ack - succesfully deregistered");
                                 isRegistered = false;
                                 sendMessageToClients(ChatServiceManager.MSG_REGISTER, 0, 0, null, null);
                                 break;
-                            case ERROR_STR:
-                                Log.d(LOGTAG, "Got error while deregistering");
+                            case MessageTypes.ERROR_MESSAGE:
+                                String errorString = ErrorCodes.getStringError(body.getInt(getString(R.string.json_content)));
+                                Log.d(LOGTAG,"Got error: " + errorString);
                                 if (isRegistered) reportServerProblem();
                                 else Log.d(LOGTAG,"Probably lready deregistered");
                                 break;
@@ -301,14 +296,16 @@ public class ChatService extends Service {
                 if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
                     JSONObject header =(JSONObject) args[1];
+                    JSONObject body =  (JSONObject) args[2];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
-                            case ACK_STR:
+                            case MessageTypes.ACK_MESSAGE:
                                 Log.d(LOGTAG, "Got ack - succesfully deregistered cleanup");
                                 break;
-                            case ERROR_STR:
-                                Log.d(LOGTAG, "Got error while deregistering cleaunp");
+                            case MessageTypes.ERROR_MESSAGE:
+                                String errorString = ErrorCodes.getStringError(body.getInt(getString(R.string.json_content)));
+                                Log.d(LOGTAG,"Got error: " + errorString);
                                 break;
                             default:
                                 Log.d(LOGTAG,"Got wrong messagetype while deregistering cleanup: " + type);
@@ -336,16 +333,19 @@ public class ChatService extends Service {
                 if (args.length != 3) Log.d(LOGTAG,"Illegal use of pkt handler");
                 else {
                     JSONObject pkt = (JSONObject) args[0];
+                    JSONObject body =  (JSONObject) args[2];
                     JSONObject header = (JSONObject) args[1];
                     try {
                         String type =  header.getString(getString(R.string.json_type));
                         switch (type) {
-                            case MESSAGE_STR:
+                            case MessageTypes.CHAT_MESSAGE:
                                 sendMessageToClients(ChatServiceManager.MSG_CHAT_LOG, 0, 0,
                                         pkt.toString(), null);
 
                                 break;
-                            case ERROR_STR:
+                            case MessageTypes.ERROR_MESSAGE:
+                                String errorString = ErrorCodes.getStringError(body.getInt(getString(R.string.json_content)));
+                                Log.d(LOGTAG,"Got error: " + errorString);
                                 reportServerProblem();
                                 Log.d(LOGTAG, "Got error while while receiving chatlog");
                                 break;
@@ -382,7 +382,7 @@ public class ChatService extends Service {
                 }
             }
         };
-        receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,1,mRegisterHandler,NO_RETRY, TIMEOUT,callOnTimout);
+        receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,1,mRegisterHandler,NO_RETRY, NetworkConsts.SOCKET_TIMEOUT,callOnTimout);
         sender.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,MSG.REGISTER);
 
     }
@@ -412,7 +412,7 @@ public class ChatService extends Service {
         if (cleanup) {
             receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,1,mDeregisterCleanupHandler);
         } else {
-            receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,1,mDeregisterHandler,NO_RETRY, TIMEOUT,callOnTimout);
+            receiver.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,1,mDeregisterHandler,NO_RETRY, NetworkConsts.SOCKET_TIMEOUT,callOnTimout);
         }
         sender.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, MSG.DEREGISTER);
 
@@ -514,7 +514,7 @@ public class ChatService extends Service {
                         if(mSocket == null) break;
                     }
                     mSocket.setSoTimeout(timeout);
-                    byte[] receiveData = new byte[PKT_SIZE];
+                    byte[] receiveData = new byte[NetworkConsts.PAYLOAD_SIZE];
 
                     DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                     while(noPkt < exptNoPkt) // Bound while(true) -- prevent flooding
@@ -607,7 +607,7 @@ public class ChatService extends Service {
     private DatagramPacket makePacket(MSG type, InetAddress ip, int port)
     {
         if (!infoReady()) return null;
-        byte[] sendData = new byte[PKT_SIZE];
+        byte[] sendData = new byte[NetworkConsts.PAYLOAD_SIZE];
 
         // Build JSON
         JSONObject jpkt = new JSONObject();
@@ -619,23 +619,23 @@ public class ChatService extends Service {
 
             switch (type) {
                 case REGISTER:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_register));
+                    jheader.put(getString(R.string.json_type),MessageTypes.REGISTER);
                     break;
                 case DEREGISTER:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_deregister));
+                    jheader.put(getString(R.string.json_type),MessageTypes.DEREGISTER);
                     break;
                 case ACK:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_ack));
+                    jheader.put(getString(R.string.json_type),MessageTypes.ACK_MESSAGE);
                     break;
                 case RETRIEVE_LOG:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_retrieve_log));
+                    jheader.put(getString(R.string.json_type),MessageTypes.RETRIEVE_CHAT_LOG);
                     break;
                 case MESSAGE:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_message));
+                    jheader.put(getString(R.string.json_type),MessageTypes.CHAT_MESSAGE);
                     break;
                 case ERROR:
                 default:
-                    jheader.put(getString(R.string.json_type),getString(R.string.msg_error));
+                    jheader.put(getString(R.string.json_type),MessageTypes.ERROR_MESSAGE);
             }
 
             jpkt.put(getString(R.string.json_header),jheader);
