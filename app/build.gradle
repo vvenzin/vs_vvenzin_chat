@@ -22,4 +22,8 @@ android {
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
     compile 'com.android.support:appcompat-v7:23.1.0'
+
+    // Unit tests dependencies
+    testCompile 'junit:junit:4.12'
+    testCompile files('testlibs/json-20150729.jar')
 }
