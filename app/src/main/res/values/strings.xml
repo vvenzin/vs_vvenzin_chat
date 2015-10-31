@@ -21,15 +21,6 @@
     <string name="json_body">body</string>
     <string name="json_content">content</string>
 
-
-    <!-- Message types -->
-    <string name="msg_register">register</string>
-    <string name="msg_deregister">deregister</string>
-    <string name="msg_ack">ack</string>
-    <string name="msg_retrieve_log">retrieve_chat_log</string>
-    <string name="msg_error">error</string>
-    <string name="msg_message">message</string>
-
     <!-- More message related -->
     <string name="json_empty">{}</string>
     <string name="uuid_pref">uuid</string>
