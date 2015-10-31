@@ -5,6 +5,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -14,6 +15,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.List;
+import java.util.PriorityQueue;
 
 import ch.ethz.inf.vs.helperclasses.EnhancedActivity;
 
@@ -130,30 +132,42 @@ public class ChatActivity extends EnhancedActivity implements View.OnClickListen
     public void onReceivedChatLog(List<String> messages)
     {
         Log.d(LOGTAG,"Received chat log");
-
-        String display = "";
-        for (String m : messages) {
-            display += getContent(m) + "   Timestamp: " + getTimeStamp(m) + "\n";
+        PriorityQueue<MyMessage> queue = new PriorityQueue(11, new MessageComparator());
+        for(String m : messages){
+            MyMessage msg = new MyMessage();
+            msg.message = getContent(m);
+            msg.vecClock = getTimeStamp(m);
+            queue.add(msg);
         }
+
+        int size = queue.size();
+        String display = "";
+        for(int i=0; i<size; ++i){
+            MyMessage msg = queue.poll();
+            display += msg.message + "\n";
+        }
+
+
         mChatTextView.setText(display);
 
-        // TODO: Task 3
     }
 
     // Get timestamp from json message
-    private String getTimeStamp(String message)
+    private VectorClock getTimeStamp(String message)
     {
-        // TODO: Extract timestamp and do something useful
+        VectorClock vecClock = new VectorClock();
         try {
             JSONObject jpkt = new JSONObject(message);
             JSONObject header = jpkt.getJSONObject(getString(R.string.json_header));
 
-            // Should probably be handled as JSON too
-            String timestamp = header.getString(getString(R.string.json_timestamp));
-            return timestamp;
 
-        } catch (JSONException e) {e.printStackTrace();}
-        return "ERROR while getting timestamp";
+            vecClock.setClockFromString(header.getString(getString(R.string.json_timestamp)));
+
+
+
+        } catch (JSONException e) {e.printStackTrace();
+        }
+        return vecClock;
     }
 
     // Get message's content
