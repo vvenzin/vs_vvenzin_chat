@@ -13,7 +13,6 @@ import android.support.v7.app.AppCompatActivity;
  */
 public class EnhancedActivity extends AppCompatActivity {
 
-
     @Override
     protected void onStart()
     {
